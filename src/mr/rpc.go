@@ -6,8 +6,18 @@ package mr
 // remember to capitalize all names.
 //
 
-import "os"
-import "strconv"
+import (
+	"os"
+	"strconv"
+)
+
+// Enum of different job types
+type JobType int
+const (
+    Mapper JobType = iota
+    Reducer
+    Waiter
+)
 
 //
 // example to show how to declare the arguments
@@ -22,8 +32,20 @@ type ExampleReply struct {
 	Y int
 }
 
-// Add your RPC definitions here.
+type HeartBeatAndGetTaskArgs struct {
+	// NOTE: taskID of 0 would mean not yet assigned a task
+	taskID int
+}
 
+type HeartBeatAndGetTaskReply struct {
+	taskID int
+	jobType JobType
+	filename string
+
+}
+
+
+// Add your RPC definitions here.
 
 // Cook up a unique-ish UNIX-domain socket name
 // in /var/tmp, for the coordinator.
