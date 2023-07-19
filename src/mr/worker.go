@@ -14,6 +14,8 @@ import (
 	"time"
 )
 
+var NumReducer int
+
 // Map functions return a slice of KeyValue.
 type KeyValue struct {
 	Key   string
@@ -54,7 +56,7 @@ func doHeartBeat(taskID int) HeartBeatAndGetTaskReply {
 		os.Exit(0)
 	}
 
-	log.Printf("[doHeartBeat]: worker got heartbeat reply: %v\n", reply)
+	// log.Printf("[doHeartBeat]: worker got heartbeat reply: %v\n", reply)
 
 	return reply
 
@@ -97,20 +99,16 @@ func doMapper(taskInfo HeartBeatAndGetTaskReply, mapf func(string, string) []Key
 			panic("[doMapper]: cannot parse count to int")
 		}
 
-		jsonEncoders[tempFileNum].Encode(
-			WordCount{
-				Key:   kv.Key,
-				Value: kv.Value,
-			},
-		)
+		jsonEncoders[tempFileNum].Encode(WordCount(kv))
 	}
 
 	for _, file := range tempFiles {
 		originalPath := file.Name()
-		// Split dir and filename from the path to the file
+		// Extract dir and filename from the path to the file
 		_, f := filepath.Split(originalPath)
+		ff := f[ : strings.LastIndex(f, "-")]
 		// The intermediate files should be put in current working directory
-		newPath := "./" + f
+		newPath := "./" + ff
 		file.Close()
 		err = os.Rename(originalPath, newPath)
 		if err != nil {
@@ -208,6 +206,9 @@ func doReducer(taskInfo HeartBeatAndGetTaskReply, reducef func(string, []string)
 
 // main/mrworker.go calls this function.
 func Worker(mapf func(string, string) []KeyValue, reducef func(string, []string) string) {
+	
+	fetchNumReducer()
+
 	taskID := 0
 
 	// Polling for tasks
@@ -227,6 +228,14 @@ func Worker(mapf func(string, string) []KeyValue, reducef func(string, []string)
 		time.Sleep(500 * time.Millisecond)
 	}
 
+}
+
+func fetchNumReducer() {
+	placeholderArgs := 0
+	ok := call("Coordinator.GetNumReducer", &placeholderArgs, &NumReducer)
+	if !ok {
+		panic("[Worker]: cannot fetch number of reducers from the coordinator")
+	}
 }
 
 // example function to show how to make an RPC call to the coordinator.

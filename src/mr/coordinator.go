@@ -12,10 +12,6 @@ import (
 	"time"
 )
 
-var (
-	NumReducer int = 0
-)
-
 type Coordinator struct {
 	// Your definitions here.
 	// This lock must be grabbed before modifying the struct
@@ -54,6 +50,11 @@ func (c *Coordinator) Example(args *ExampleArgs, reply *ExampleReply) error {
 	return nil
 }
 
+func (c *Coordinator) GetNumReducer(args *int, reply *int) error {
+	*reply = c.nReducer
+	return nil
+}
+
 func (c *Coordinator) TaskLivelinessCheck() {
 	for {
 		c.mutex.Lock()
@@ -63,18 +64,19 @@ func (c *Coordinator) TaskLivelinessCheck() {
 			timeDiff := currTime.Sub(taskInfo.status.lastSeen).Seconds()
 			if timeDiff > 10 && taskInfo.status.isAssigned && !taskInfo.status.isComplete {
 				// Prune and create a new task if the task has been assigned to a worker and has not been completed within 10 seconds
-				keysToDelete = append(keysToDelete, taskID)	
+				keysToDelete = append(keysToDelete, taskID)
 			}
 		}
 
 		for _, taskID := range keysToDelete {
+			fmt.Println("has task to remove")
 			taskInfo := c.tasks[taskID]
 			newTask := &Task{
-				id: c.nextTaskKey,
+				id:       c.nextTaskKey,
 				filename: taskInfo.filename,
 				status: TaskStatus{
 					isAssigned: false,
-					lastSeen: time.Now(),
+					lastSeen:   time.Now(),
 					isComplete: false,
 				},
 				jobType: taskInfo.jobType,
@@ -83,7 +85,7 @@ func (c *Coordinator) TaskLivelinessCheck() {
 			c.tasks[newTask.id] = newTask
 			delete(c.tasks, taskID)
 		}
-		c.mutex.Unlock()	
+		c.mutex.Unlock()
 		time.Sleep(time.Second)
 	}
 }
@@ -103,6 +105,7 @@ func (c *Coordinator) getAJob() (*Task, bool) {
 		for _, job := range c.tasks {
 			if !job.status.isAssigned {
 				job.status.isAssigned = true
+				job.status.lastSeen = time.Now()
 				return job, true
 			}
 		}
@@ -113,13 +116,15 @@ func (c *Coordinator) getAJob() (*Task, bool) {
 // This function assumes the caller already grabs the lock of coordinator
 // This function should only be called once after all mappers have finished the job
 func (c *Coordinator) createReduceTasks() error {
-	for i := 0; i < NumReducer; i++ {
-		// Embed information about which files the reducer should combine. 
+	for i := 0; i < c.nReducer; i++ {
+		// Embed information about which files the reducer should combine.
 		// The format of the information could be e.g. "1,2,3,4,5-1", which means the reducer 1 should read files from mr-1-1, mr-1-2, ... , mr-5-1 and combine them
 		intermediateFilesHint := ""
 		for k := range c.mapperDoneIDs {
 			intermediateFilesHint += fmt.Sprintf("%v,", k)
 		}
+		// Trim the last comma
+		intermediateFilesHint = intermediateFilesHint[:len(intermediateFilesHint)-1]
 		intermediateFilesHint += ("-" + strconv.Itoa(i+1))
 
 		task := &Task{
@@ -175,6 +180,7 @@ func (c *Coordinator) HeartBeatAndGetTask(args *HeartBeatAndGetTaskArgs, reply *
 			reply.JobType = Waiter
 			reply.TaskID = 0
 		}
+
 	} else {
 		// update task's last seen heartbeat time
 		task, ok := c.tasks[args.TaskID]
@@ -208,7 +214,7 @@ func (c *Coordinator) TaskReport(args *TaskReportArgs, reply *TaskReportReply) e
 		}
 	case Reducer:
 		// Check if the reporting worker is completing a task that has not been abandoned by the coordinator
-		if _, ok := c.tasks[args.TaskID]; ok {	
+		if _, ok := c.tasks[args.TaskID]; ok {
 			c.nReducerDone++
 			c.tasks[args.TaskID].status.isComplete = true
 		}
@@ -256,9 +262,9 @@ func (c *Coordinator) Done() bool {
 // main/mrcoordinator.go calls this function.
 // nReduce is the number of reduce tasks to use.
 func MakeCoordinator(files []string, nReduce int) *Coordinator {
-	NumReducer = nReduce
 
 	c := Coordinator{}
+	c.mutex.Lock()
 
 	// Your code here.
 	// Initialize the coordinator
@@ -272,7 +278,6 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	c.mapperDoneIDs = make(map[int]bool)
 
 	// Fill in the task queue
-	c.mutex.Lock()
 	err := c.createMapTasks()
 	c.mutex.Unlock()
 	if err != nil {
