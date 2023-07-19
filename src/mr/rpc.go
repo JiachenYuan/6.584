@@ -13,10 +13,11 @@ import (
 
 // Enum of different job types
 type JobType int
+
 const (
-    Mapper JobType = iota
-    Reducer
-    Waiter
+	Mapper JobType = iota
+	Reducer
+	Waiter
 )
 
 //
@@ -33,17 +34,25 @@ type ExampleReply struct {
 }
 
 type HeartBeatAndGetTaskArgs struct {
-	// NOTE: taskID of 0 would mean not yet assigned a task
-	taskID int
+	// NOTE: TaskID of 0 would mean not yet assigned a task
+	TaskID int
 }
 
 type HeartBeatAndGetTaskReply struct {
-	taskID int
-	jobType JobType
-	filename string
-
+	TaskID   int
+	JobType  JobType
+	Filename string
+	// Ok       bool
 }
 
+type TaskReportArgs struct {
+	JobType JobType
+	TaskID int
+}
+
+type TaskReportReply struct {
+	Ok bool
+}
 
 // Add your RPC definitions here.
 
